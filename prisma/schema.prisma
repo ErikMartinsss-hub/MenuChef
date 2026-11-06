@@ -31,6 +31,28 @@ enum PaymentMethod {
   CARD
 }
 
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+}
+
+enum PaymentProvider {
+  MANUAL
+  MERCADO_PAGO
+  STRIPE
+  PAGARME
+  ASAAS
+}
+
+enum PixKeyType {
+  CPF
+  CNPJ
+  EMAIL
+  PHONE
+  RANDOM
+}
+
 /// A restaurant using the white-label platform.
 model Tenant {
   id            String   @id @default(cuid())
@@ -53,8 +75,31 @@ model Tenant {
   categories Category[]
   products   Product[]
   orders     Order[]
+  paymentSettings TenantPaymentSettings?
 
   @@map("tenants")
+}
+
+/// Payment configuration owned by each tenant/store.
+/// Public fields are exposed to the storefront; no gateway secrets live here yet.
+model TenantPaymentSettings {
+  id            String          @id @default(cuid())
+  tenantId      String          @unique
+  provider      PaymentProvider @default(MANUAL)
+  pixEnabled    Boolean         @default(true)
+  cashEnabled   Boolean         @default(true)
+  cardEnabled   Boolean         @default(true)
+  pixKeyType    PixKeyType?
+  pixKey        String?
+  pixHolderName String?
+  pixCity       String?
+  instructions  String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_payment_settings")
 }
 
 model Category {
@@ -135,6 +180,8 @@ model Order {
   address       String?
   tableNumber   String?
   paymentMethod PaymentMethod
+  paymentStatus PaymentStatus @default(PENDING)
+  paidAt        DateTime?
   changeFor     Decimal?      @db.Decimal(10, 2)
   notes         String?
   subtotal      Decimal       @db.Decimal(10, 2)

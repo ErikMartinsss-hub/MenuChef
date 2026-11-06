@@ -11,6 +11,7 @@ import {
   Flame,
   Inbox,
   RefreshCw,
+  Settings,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -341,6 +342,36 @@ export function KitchenDashboard({
     }
   }
 
+  async function handleMarkPaid(order: OrderDTO) {
+    setUpdatingId(order.id);
+    try {
+      const response = await fetch(`/api/orders/${order.id}/payment`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentStatus: "PAID" }),
+      });
+      const payload = (await response.json()) as {
+        order?: OrderDTO;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.order) {
+        throw new Error(payload.error ?? "Falha ao atualizar o pagamento");
+      }
+
+      setOrders((previous) => upsertOrder(previous, payload.order as OrderDTO));
+      toast.success(
+        `Pagamento confirmado · Pedido #${order.orderNumber.padStart(4, "0")}`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Não foi possível atualizar.",
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   function handleCancel(order: OrderDTO) {
     const confirmed = window.confirm(
       `Cancelar o pedido #${order.orderNumber} de ${order.customerName}?`,
@@ -421,6 +452,14 @@ export function KitchenDashboard({
                 )}
                 {sound.enabled ? "Som ativo" : "Ativar som"}
               </button>
+
+              <Link
+                href={`/admin/${tenant.slug}/pagamentos`}
+                className="hidden inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 px-3 text-[10.5px] font-bold text-stone-300 transition hover:bg-white/5 hover:text-white sm:inline-flex"
+              >
+                <Settings className="h-3.5 w-3.5" />
+                Pagamentos
+              </Link>
 
               <Link
                 href={`/${tenant.slug}`}
@@ -569,6 +608,7 @@ export function KitchenDashboard({
                 updating={updatingId === order.id}
                 onAdvance={(target, status) => void updateStatus(target, status)}
                 onCancel={handleCancel}
+                onMarkPaid={handleMarkPaid}
                 onPrint={handlePrint}
               />
             ))}

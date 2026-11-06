@@ -11,6 +11,7 @@ import type { PrintSettings, TenantDTO, TenantSummaryDTO } from "@/types";
 export async function getTenants(): Promise<TenantSummaryDTO[]> {
   const tenants = await prisma.tenant.findMany({
     orderBy: { createdAt: "asc" },
+    include: { paymentSettings: true },
   });
   return tenants.map(serializeTenantSummary);
 }
@@ -18,7 +19,10 @@ export async function getTenants(): Promise<TenantSummaryDTO[]> {
 export async function getTenantSummary(
   slug: string,
 ): Promise<TenantSummaryDTO | null> {
-  const tenant = await prisma.tenant.findUnique({ where: { slug } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug },
+    include: { paymentSettings: true },
+  });
   return tenant ? serializeTenantSummary(tenant) : null;
 }
 
@@ -28,6 +32,7 @@ export async function getStorefrontTenant(
   const tenant = await prisma.tenant.findUnique({
     where: { slug },
     include: {
+      paymentSettings: true,
       categories: {
         orderBy: [{ order: "asc" }, { name: "asc" }],
         include: {
@@ -52,7 +57,10 @@ export async function getStorefrontTenant(
 }
 
 export async function getKitchenData(slug: string) {
-  const tenant = await prisma.tenant.findUnique({ where: { slug } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug },
+    include: { paymentSettings: true },
+  });
   if (!tenant) return null;
 
   const [activeOrders, completedOrders, tenants] = await Promise.all([
@@ -71,7 +79,10 @@ export async function getKitchenData(slug: string) {
       orderBy: { updatedAt: "desc" },
       take: 20,
     }),
-    prisma.tenant.findMany({ orderBy: { createdAt: "asc" } }),
+    prisma.tenant.findMany({
+      orderBy: { createdAt: "asc" },
+      include: { paymentSettings: true },
+    }),
   ]);
 
   return {

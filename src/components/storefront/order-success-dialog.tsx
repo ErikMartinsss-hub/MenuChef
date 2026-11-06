@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import {
   Bike,
   Check,
+  Copy,
   MessageCircle,
   ShoppingBag,
   UtensilsCrossed,
@@ -31,6 +33,19 @@ export function OrderSuccessDialog({
   order: OrderDTO | null;
   tenant: TenantSummaryDTO;
 }) {
+  const [copiedPixKey, setCopiedPixKey] = useState(false);
+
+  async function handleCopyPixKey() {
+    if (!tenant.payment.pixKey) return;
+    try {
+      await navigator.clipboard.writeText(tenant.payment.pixKey);
+      setCopiedPixKey(true);
+      window.setTimeout(() => setCopiedPixKey(false), 2000);
+    } catch {
+      // Alguns contextos bloqueiam clipboard; ignora.
+    }
+  }
+
   if (!order) return null;
 
   const steps = stepsByType[order.type];
@@ -88,6 +103,77 @@ export function OrderSuccessDialog({
               {formatBRL(order.total)}
             </span>
           </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50/70 p-4 text-left">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-stone-600">Pagamento</span>
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide",
+                order.paymentStatus === "PAID"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : order.paymentStatus === "REFUNDED"
+                    ? "bg-stone-200 text-stone-500"
+                    : "bg-amber-100 text-amber-700",
+              )}
+            >
+              {order.paymentStatus === "PAID"
+                ? "Pago"
+                : order.paymentStatus === "REFUNDED"
+                  ? "Estornado"
+                  : "Pendente"}
+            </span>
+          </div>
+
+          {order.paymentStatus === "PAID" ? (
+            <p className="mt-2 text-[11px] font-semibold text-emerald-700">
+              Recebemos o pagamento. Obrigado!
+            </p>
+          ) : (
+            <div className="mt-3">
+              {order.paymentMethod === "PIX" ? (
+                <div className="rounded-xl border border-stone-200 bg-white px-3.5 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">
+                    Pague via PIX
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-stone-900">
+                    {[tenant.payment.pixHolderName, tenant.payment.pixKey]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                  {tenant.payment.pixCity ? (
+                    <p className="mt-0.5 text-[10px] text-stone-400">
+                      Cidade: {tenant.payment.pixCity}
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyPixKey()}
+                    className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg bg-stone-900 px-3 text-[10.5px] font-bold text-white transition hover:bg-stone-800"
+                  >
+                    <Copy className="h-3 w-3" />
+                    {copiedPixKey ? "Chave copiada!" : "Copiar chave PIX"}
+                  </button>
+                  <p className="mt-2 text-[10px] leading-relaxed text-stone-400">
+                    {tenant.payment.instructions ?? "Envie o comprovante para a loja."}
+                  </p>
+                </div>
+              ) : order.paymentMethod === "CASH" ? (
+                <p className="text-[11px] leading-relaxed text-stone-500">
+                  O cliente deve pagar em dinheiro na entrega ou retirada
+                  {order.changeFor && order.changeFor > order.total
+                    ? ` e entregar troco de ${formatBRL(order.changeFor - order.total)}.`
+                    : "."}
+                </p>
+              ) : (
+                <p className="text-[11px] leading-relaxed text-stone-500">
+                  O cliente deve pagar o cartão na maquininha na entrega ou
+                  retirada.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="mt-6">

@@ -1,4 +1,4 @@
-import type { OrderStatus, Prisma } from "@prisma/client";
+import type { OrderStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { publishOrderEvent } from "@/lib/realtime";
 import { fromCents, toCents } from "@/lib/money";
@@ -133,6 +133,13 @@ export async function createOrder(input: CreateOrderInput): Promise<OrderDTO> {
       slug: true,
       isOpen: true,
       deliveryFee: true,
+      paymentSettings: {
+        select: {
+          pixEnabled: true,
+          cashEnabled: true,
+          cardEnabled: true,
+        },
+      },
     },
   });
 
@@ -142,6 +149,21 @@ export async function createOrder(input: CreateOrderInput): Promise<OrderDTO> {
   if (!tenant.isOpen) {
     throw new OrderServiceError(
       "O restaurante está fechado no momento. Tente novamente mais tarde.",
+      409,
+    );
+  }
+
+  const settings = tenant.paymentSettings;
+  const paymentEnabled =
+    input.paymentMethod === "PIX"
+      ? (settings?.pixEnabled ?? true)
+      : input.paymentMethod === "CASH"
+        ? (settings?.cashEnabled ?? true)
+        : (settings?.cardEnabled ?? true);
+
+  if (!paymentEnabled) {
+    throw new OrderServiceError(
+      "Esta forma de pagamento não está disponível nesta loja.",
       409,
     );
   }
@@ -258,6 +280,37 @@ export async function updateOrderStatus(
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: { status },
+    include: { items: true },
+  });
+
+  const order = serializeOrder(updated);
+  publishOrderEvent(existing.tenantId, "order.updated", order);
+  return order;
+}
+
+export async function updateOrderPayment(
+  orderId: string,
+  paymentStatus: PaymentStatus,
+): Promise<OrderDTO> {
+  const existing = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, tenantId: true, paymentStatus: true, paidAt: true },
+  });
+
+  if (!existing) {
+    throw new OrderServiceError("Pedido não encontrado.", 404);
+  }
+
+  const paidAt =
+    paymentStatus === "PAID"
+      ? (existing.paidAt ?? new Date())
+      : paymentStatus === "PENDING"
+        ? null
+        : existing.paidAt;
+
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: { paymentStatus, paidAt },
     include: { items: true },
   });
 

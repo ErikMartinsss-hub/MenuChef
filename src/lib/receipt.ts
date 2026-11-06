@@ -179,7 +179,7 @@ export function buildReceiptHtml(
       ${moneyRow("TOTAL", order.total, true)}
     </div>
     <hr />
-    <div class="row"><span>Pagamento</span><span>${escapeHtml(PAYMENT_LABEL[order.paymentMethod])}</span></div>
+    <div class="row"><span>Pagamento</span><span>${escapeHtml(PAYMENT_LABEL[order.paymentMethod])} · ${escapeHtml(order.paymentStatus === "PAID" ? "Pago" : order.paymentStatus === "REFUNDED" ? "Estornado" : "Pendente")}</span></div>
     ${change}
     ${customerNotes}
     <hr />

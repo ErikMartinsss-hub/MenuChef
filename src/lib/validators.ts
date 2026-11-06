@@ -1,4 +1,4 @@
-import { OrderStatus, OrderType, PaymentMethod } from "@prisma/client";
+import { OrderStatus, OrderType, PaymentMethod, PaymentStatus, PixKeyType } from "@prisma/client";
 import { z } from "zod";
 
 const phoneSchema = z
@@ -70,6 +70,91 @@ export const updateOrderStatusSchema = z.object({
 });
 
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
+
+export const updateOrderPaymentSchema = z.object({
+  paymentStatus: z.nativeEnum(PaymentStatus, {
+    errorMap: () => ({ message: "Status de pagamento inválido" }),
+  }),
+});
+
+export type UpdateOrderPaymentInput = z.infer<typeof updateOrderPaymentSchema>;
+
+export const updatePaymentSettingsSchema = z
+  .object({
+    pixEnabled: z.boolean(),
+    cashEnabled: z.boolean(),
+    cardEnabled: z.boolean(),
+    pixKeyType: z.nativeEnum(PixKeyType).nullable().optional(),
+    pixKey: z.string().trim().max(120).nullable().optional(),
+    pixHolderName: z.string().trim().max(80).nullable().optional(),
+    pixCity: z.string().trim().max(40).nullable().optional(),
+    instructions: z.string().trim().max(500).nullable().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.pixEnabled && !data.cashEnabled && !data.cardEnabled) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["pixEnabled"],
+        message: "Habilite ao menos uma forma de pagamento",
+      });
+    }
+
+    if (!data.pixEnabled) return;
+
+    if (!data.pixKeyType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["pixKeyType"],
+        message: "Escolha o tipo da chave PIX",
+      });
+    }
+    if (!data.pixKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["pixKey"],
+        message: "Informe a chave PIX da loja",
+      });
+    }
+    if (!data.pixHolderName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["pixHolderName"],
+        message: "Informe o nome do titular da conta",
+      });
+    }
+    if (!data.pixCity) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["pixCity"],
+        message: "Informe a cidade da conta PIX",
+      });
+    }
+
+    if (!data.pixKeyType || !data.pixKey) return;
+
+    const key = data.pixKey;
+    const digits = key.replace(/\D/g, "");
+    const invalid =
+      (data.pixKeyType === "CPF" && digits.length !== 11) ||
+      (data.pixKeyType === "CNPJ" && digits.length !== 14) ||
+      (data.pixKeyType === "EMAIL" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) ||
+      (data.pixKeyType === "PHONE" &&
+        (digits.length < 10 || digits.length > 13)) ||
+      (data.pixKeyType === "RANDOM" &&
+        !/^[0-9a-fA-F-]{32,36}$/.test(key));
+
+    if (invalid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["pixKey"],
+        message: "Chave PIX inválida para o tipo selecionado",
+      });
+    }
+  });
+
+export type UpdatePaymentSettingsInput = z.infer<
+  typeof updatePaymentSettingsSchema
+>;
 
 export const createProductSchema = z.object({
   name: z.string().trim().min(2).max(100),

@@ -106,6 +106,7 @@ async function createSeedOrder(
   const updatedAt = new Date(
     Date.now() - (order.completedMinutesAgo ?? Math.max(1, order.minutesAgo - 1)) * 60_000,
   );
+  const paid = order.status === "COMPLETED" || order.status === "DISPATCHED";
 
   return prisma.order.create({
     data: {
@@ -118,6 +119,8 @@ async function createSeedOrder(
       address: order.address ?? null,
       tableNumber: order.tableNumber ?? null,
       paymentMethod: order.payment,
+      paymentStatus: paid ? "PAID" : "PENDING",
+      paidAt: paid ? createdAt : null,
       changeFor: order.changeFor != null ? order.changeFor.toFixed(2) : null,
       notes: order.notes ?? null,
       subtotal: subtotal.toFixed(2),
@@ -152,6 +155,20 @@ async function main() {
         receiptHeader: "Hambúrgueres artesanais na brasa",
         showLogo: true,
         paperWidthMm: 80,
+      },
+      paymentSettings: {
+        create: {
+          provider: "MANUAL",
+          pixEnabled: true,
+          cashEnabled: true,
+          cardEnabled: true,
+          pixKeyType: "CNPJ",
+          pixKey: "12.345.678/0001-90",
+          pixHolderName: "BRASA BURGER LTDA",
+          pixCity: "SAO PAULO",
+          instructions:
+            "Pague pelo app do seu banco e envie o comprovante no WhatsApp (11) 98888-1234.",
+        },
       },
       categories: {
         create: [
@@ -489,6 +506,20 @@ async function main() {
         receiptHeader: "Bowls, saladas e sucos naturais",
         showLogo: true,
         paperWidthMm: 80,
+      },
+      paymentSettings: {
+        create: {
+          provider: "MANUAL",
+          pixEnabled: true,
+          cashEnabled: true,
+          cardEnabled: false,
+          pixKeyType: "EMAIL",
+          pixKey: "financeiro@verdevivo.com.br",
+          pixHolderName: "VERDE VIVO ALIMENTOS",
+          pixCity: "SAO PAULO",
+          instructions:
+            "PIX da loja: envie o comprovante no WhatsApp (11) 97777-4321. Cartão apenas na entrega.",
+        },
       },
       categories: {
         create: [

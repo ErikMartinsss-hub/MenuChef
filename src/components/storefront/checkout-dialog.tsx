@@ -80,6 +80,17 @@ export function CheckoutDialog({
 
   const deliveryFee = type === "DELIVERY" ? tenant.deliveryFee : 0;
   const total = subtotal + deliveryFee;
+  const availablePaymentOptions = paymentOptions.filter((option) =>
+    option.value === "PIX"
+      ? tenant.payment.pixEnabled
+      : option.value === "CASH"
+        ? tenant.payment.cashEnabled
+        : tenant.payment.cardEnabled,
+  );
+  const selectedPayment = availablePaymentOptions.find(
+    (option) => option.value === paymentMethod,
+  );
+  const paymentMethodEffective = selectedPayment?.value ?? "CASH";
   const itemCount = useMemo(
     () => lines.reduce((sum, line) => sum + line.quantity, 0),
     [lines],
@@ -104,7 +115,7 @@ export function CheckoutDialog({
 
     const parsedChange = Number(changeFor.replace(",", "."));
     if (
-      paymentMethod === "CASH" &&
+      paymentMethodEffective === "CASH" &&
       changeFor.trim() &&
       Number.isFinite(parsedChange) &&
       parsedChange > 0 &&
@@ -147,9 +158,9 @@ export function CheckoutDialog({
           customerPhone: customerPhone.trim(),
           address: type === "DELIVERY" ? address.trim() : null,
           tableNumber: type === "TABLE" ? tableNumber.trim() : null,
-          paymentMethod,
+          paymentMethod: paymentMethodEffective,
           changeFor:
-            paymentMethod === "CASH" && Number.isFinite(parsedChange) && parsedChange > 0
+            paymentMethodEffective === "CASH" && Number.isFinite(parsedChange) && parsedChange > 0
               ? parsedChange
               : null,
           notes: notes.trim() || null,
@@ -321,8 +332,8 @@ export function CheckoutDialog({
 
           <section>
             <h3 className="text-sm font-bold text-stone-900">Pagamento</h3>
-            <div className="mt-2.5 grid grid-cols-3 gap-2">
-              {paymentOptions.map((option) => {
+            <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {availablePaymentOptions.map((option) => {
                 const Icon = option.icon;
                 const active = paymentMethod === option.value;
                 return (
@@ -349,7 +360,7 @@ export function CheckoutDialog({
               })}
             </div>
 
-            {paymentMethod === "CASH" ? (
+            {paymentMethodEffective === "CASH" ? (
               <div className="mt-3">
                 <label htmlFor="checkout-change" className="text-xs font-semibold text-stone-700">
                   Troco para quanto?{" "}
@@ -368,12 +379,36 @@ export function CheckoutDialog({
             ) : null}
 
             <p className="mt-2 text-[11px] leading-relaxed text-stone-400">
-              {paymentMethod === "PIX"
-                ? "O pagamento via PIX é combinado diretamente com a loja."
-                : paymentMethod === "CARD"
-                  ? "A maquininha é levada até você na entrega ou retirada."
+              {paymentMethodEffective === "PIX"
+                ? tenant.payment.instructions
+                  ? `Pague via PIX com a chave da loja. ${tenant.payment.instructions}`
+                  : "Pague via PIX com a chave da loja."
+                : paymentMethodEffective === "CARD"
+                  ? "O pagamento via cartão é combinado diretamente com a loja."
                   : "Informe o valor para calcularmos seu troco."}
             </p>
+
+            {paymentMethodEffective === "PIX" && tenant.payment.pixKey ? (
+              <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">
+                  Chave PIX da loja
+                </p>
+                <p className="mt-0.5 text-xs font-semibold text-stone-700">
+                  {[tenant.payment.pixHolderName, tenant.payment.pixKey]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+                {tenant.payment.pixCity ? (
+                  <p className="mt-0.5 text-[10px] text-stone-400">
+                    Cidade: {tenant.payment.pixCity}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-[10px] leading-relaxed text-stone-400">
+                  {tenant.payment.instructions ??
+                    "Pague pelo seu app e envie o comprovante para a loja."}
+                </p>
+              </div>
+            ) : null}
           </section>
 
           <section>
@@ -433,7 +468,7 @@ export function CheckoutDialog({
             size="lg"
             className="w-full justify-between"
             loading={submitting}
-            disabled={!tenant.isOpen}
+            disabled={!tenant.isOpen || availablePaymentOptions.length === 0}
           >
             <span>{submitting ? "Enviando..." : "Enviar pedido"}</span>
             <span className="tabular-nums">{formatBRL(total)}</span>

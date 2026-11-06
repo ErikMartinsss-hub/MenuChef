@@ -5,6 +5,7 @@ import {
   Bike,
   Check,
   CheckCircle2,
+  CircleDollarSign,
   ExternalLink,
   MapPin,
   MessageCircle,
@@ -130,6 +131,7 @@ export function OrderCard({
   updating,
   onAdvance,
   onCancel,
+  onMarkPaid,
   onPrint,
 }: {
   order: OrderDTO;
@@ -138,6 +140,7 @@ export function OrderCard({
   updating: boolean;
   onAdvance: (order: OrderDTO, status: OrderStatus) => void;
   onCancel: (order: OrderDTO) => void;
+  onMarkPaid: (order: OrderDTO) => void;
   onPrint: (order: OrderDTO) => void;
 }) {
   const next = getNextAction(order);
@@ -151,6 +154,12 @@ export function OrderCard({
     order.paymentMethod === "CASH" && order.changeFor
       ? order.changeFor - order.total
       : null;
+  const paymentStatusLabel =
+    order.paymentStatus === "PAID"
+      ? "Pago"
+      : order.paymentStatus === "REFUNDED"
+        ? "Estornado"
+        : "A pagar";
 
   return (
     <article
@@ -318,12 +327,47 @@ export function OrderCard({
                 ) : null}
               </span>
             ) : null}
+            <span
+              className={cn(
+                "rounded-full px-1.5 py-1 font-bold uppercase tracking-wide",
+                order.paymentStatus === "PAID"
+                  ? "bg-emerald-500/15 text-emerald-300"
+                  : order.paymentStatus === "REFUNDED"
+                    ? "bg-stone-500/20 text-stone-300"
+                    : "bg-amber-400/15 text-amber-300",
+              )}
+            >
+              {paymentStatusLabel}
+            </span>
           </div>
           <p className="text-base font-black tabular-nums text-white">
             {formatBRL(order.total)}
           </p>
         </div>
       </div>
+
+      {order.paymentStatus === "PENDING" && order.status !== "CANCELLED" ? (
+        <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-amber-400/20 bg-amber-400/[0.07] px-3.5 py-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-amber-300/90">
+              Pagamento pendente
+            </p>
+            <p className="mt-0.5 text-[10.5px] leading-relaxed text-amber-200/80">
+              Confirme o recebimento (PIX, dinheiro ou cartão) para seguir com o
+              pedido.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onMarkPaid(order)}
+            disabled={updating}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-amber-400 px-3 text-[10.5px] font-bold text-amber-950 transition hover:bg-amber-300 disabled:opacity-50"
+          >
+            <CircleDollarSign className="h-3.5 w-3.5" />
+            Marcar como pago
+          </button>
+        </div>
+      ) : null}
 
       <div className="flex items-center gap-2 border-t border-white/8 bg-black/10 px-3.5 py-3">
         {next ? (

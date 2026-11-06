@@ -7,6 +7,26 @@ export type OrderStatus =
   | "COMPLETED"
   | "CANCELLED";
 export type PaymentMethod = "PIX" | "CASH" | "CARD";
+export type PaymentStatus = "PENDING" | "PAID" | "REFUNDED";
+export type PaymentProvider =
+  | "MANUAL"
+  | "MERCADO_PAGO"
+  | "STRIPE"
+  | "PAGARME"
+  | "ASAAS";
+export type PixKeyType = "CPF" | "CNPJ" | "EMAIL" | "PHONE" | "RANDOM";
+
+export interface TenantPaymentConfigDTO {
+  provider: PaymentProvider;
+  pixEnabled: boolean;
+  cashEnabled: boolean;
+  cardEnabled: boolean;
+  pixKeyType: PixKeyType | null;
+  pixKey: string | null;
+  pixHolderName: string | null;
+  pixCity: string | null;
+  instructions: string | null;
+}
 
 export interface PrintSettings {
   footerNote?: string;
@@ -65,6 +85,7 @@ export interface TenantSummaryDTO {
   address: string;
   isOpen: boolean;
   deliveryFee: number;
+  payment: TenantPaymentConfigDTO;
 }
 
 export interface TenantDTO extends TenantSummaryDTO {
@@ -93,6 +114,8 @@ export interface OrderDTO {
   address: string | null;
   tableNumber: string | null;
   paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  paidAt: string | null;
   changeFor: number | null;
   notes: string | null;
   subtotal: number;

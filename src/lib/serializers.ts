@@ -1,4 +1,4 @@
-import { Prisma, type Category, type Order, type OrderItem, type Product, type ProductOption, type ProductOptionGroup, type Tenant } from "@prisma/client";
+import { Prisma, type Category, type Order, type OrderItem, type Product, type ProductOption, type ProductOptionGroup, type Tenant, type TenantPaymentSettings } from "@prisma/client";
 import type {
   CategoryDTO,
   OrderDTO,
@@ -8,10 +8,12 @@ import type {
   ProductOptionGroupDTO,
   SelectedOption,
   TenantDTO,
+  TenantPaymentConfigDTO,
   TenantSummaryDTO,
 } from "@/types";
 
 type TenantWithRelations = Tenant & {
+  paymentSettings?: TenantPaymentSettings | null;
   categories: Array<
     Category & {
       products: Array<
@@ -31,7 +33,25 @@ export function orderQueryInclude() {
   return orderInclude;
 }
 
-export function serializeTenantSummary(tenant: Tenant): TenantSummaryDTO {
+export function serializePaymentSettings(
+  settings: TenantPaymentSettings | null | undefined,
+): TenantPaymentConfigDTO {
+  return {
+    provider: settings?.provider ?? "MANUAL",
+    pixEnabled: settings?.pixEnabled ?? true,
+    cashEnabled: settings?.cashEnabled ?? true,
+    cardEnabled: settings?.cardEnabled ?? true,
+    pixKeyType: settings?.pixKeyType ?? null,
+    pixKey: settings?.pixKey ?? null,
+    pixHolderName: settings?.pixHolderName ?? null,
+    pixCity: settings?.pixCity ?? null,
+    instructions: settings?.instructions ?? null,
+  };
+}
+
+export function serializeTenantSummary(
+  tenant: Tenant & { paymentSettings?: TenantPaymentSettings | null },
+): TenantSummaryDTO {
   return {
     id: tenant.id,
     name: tenant.name,
@@ -43,6 +63,7 @@ export function serializeTenantSummary(tenant: Tenant): TenantSummaryDTO {
     address: tenant.address,
     isOpen: tenant.isOpen,
     deliveryFee: Number(tenant.deliveryFee.toString()),
+    payment: serializePaymentSettings(tenant.paymentSettings),
   };
 }
 
@@ -129,6 +150,8 @@ export function serializeOrder(order: Order & { items: OrderItem[] }): OrderDTO 
     address: order.address,
     tableNumber: order.tableNumber,
     paymentMethod: order.paymentMethod,
+    paymentStatus: order.paymentStatus,
+    paidAt: order.paidAt ? order.paidAt.toISOString() : null,
     changeFor: order.changeFor ? Number(order.changeFor.toString()) : null,
     notes: order.notes,
     subtotal: Number(order.subtotal.toString()),

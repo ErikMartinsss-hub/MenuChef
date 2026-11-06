@@ -11,7 +11,7 @@ Starter full-stack **white-label de cardápio online e delivery**, pronto para d
 - **Cardápio público mobile-first** em `/[slug]` com branding dinâmico (cor primária, logo, nome e contato do tenant).
 - **Categorias com navegação sticky** e scrollspy, cards de produto e modal de detalhes.
 - **Carrinho com adicionais**: grupos de opções com mínimo/máximo, preço extra e observações por item.
-- **Checkout completo**: entrega, retirada ou mesa, PIX/dinheiro/cartão, troco para dinheiro, taxa de entrega e resumo.
+- **Checkout completo**: entrega, retirada ou mesa, PIX/dinheiro/cartão, troco para dinheiro, taxa de entrega e resumo. O checkout só lista os métodos habilitados para aquele tenant.
 - **Preço recalculado no servidor** a partir do banco — o cliente nunca define quanto vai pagar.
 - **KDS de cozinha** em `/admin/[slug]`: fila por status, avanço rápido, cancelamento e alerta sonoro.
 - **Tempo real via SSE**: novos pedidos e mudanças de status chegam sem refresh; reconexão automática.
@@ -217,10 +217,53 @@ Decisões relevantes:
 - **`OrderStatus`**: `PENDING`, `PREPARING`, `READY`, `DISPATCHED`, `COMPLETED`, `CANCELLED`.
 - **`OrderType`**: `DELIVERY`, `TAKEOUT`, `TABLE`.
 - **`PaymentMethod`**: `PIX`, `CASH`, `CARD`.
+- **`PaymentStatus`**: `PENDING`, `PAID`, `REFUNDED` (rastreio de pagamento por pedido).
+- **`TenantPaymentSettings`**: configuração de pagamento **1:1 com o tenant** (flags de métodos, chave PIX, titular, cidade, instruções). No MVP atual o provider é `MANUAL`.
 
 ### Cancelamento
 
 Pedidos cancelados saem das abas ativas. O KDS permite cancelar enquanto o pedido está pendente ou em preparo.
+
+---
+
+## Pagamentos por loja
+
+O objetivo do modelo é que **cada loja tenha o seu próprio pagamento** (conta PIX diferente, formas habilitadas diferente). Hoje o MVP implementa o caminho **manual**:
+
+- Cada tenant tem um registro `TenantPaymentSettings` (1:1).
+- O tenant escolhe quais métodos existem no cardápio público: **PIX**, **Dinheiro** e/ou **Cartão**.
+- Se PIX for habilitado, o admin informa a **chave PIX** daquele estabelecimento (CPF/CNPJ/e-mail/telefone/chave aleatória), o **nome do titular**, a **cidade** (BR Code) e instruções para o cliente.
+- O checkout público (`/[slug]`) filtra os métodos habilitados e, se PIX estiver ativo, mostra a chave da loja para o cliente copiar/colar ou acompanhar no comprovante.
+- O sucesso do pedido mostra o status de pagamento e as instruções PIX (com botão de copiar chave).
+- O KDS (`/admin/[slug]`) mostra o status (`Pago`/`A pagar`/`Estornado`) e tem a ação **Marcar como pago** (fluxo manual de conferência).
+- O recibo 80mm imprime o status de pagamento junto ao total.
+
+### Rotas
+
+- `GET /api/tenants/[slug]/payment-settings` → `{ payment: { provider, pixEnabled, cashEnabled, cardEnabled, pixKeyType, pixKey, pixHolderName, pixCity, instructions } }`
+- `PUT /api/tenants/[slug]/payment-settings` → atualiza os campos (Zod valida ao menos um método e a chave PIX conforme o tipo).
+- `GET /api/orders/[id]/payment` e `PATCH /api/orders/[id]/payment` → `{ paymentStatus }` ∈ `PENDING | PAID | REFUNDED`.
+
+### Configuração no admin
+
+A página de configurações fica em `/admin/[slug]/pagamentos` e salva via `PUT`. No seed, os dois restaurantes já vêm configurados:
+
+| Tenant | PIX | Dinheiro | Cartão | Chave |
+| --- | --- | --- | --- | --- |
+| **Brasa Burger** | ✅ | ✅ | ✅ | CNPJ `12.345.678/0001-90` |
+| **Verde Vivo** | ✅ | ✅ | ❌ (desabilitado) | E-mail `financeiro@verdevivo.com.br` |
+
+Isso demonstra o efeito do filtro: no cardápio do **Verde Vivo** não aparece a opção de cartão.
+
+### Próximo passo: pagamentos automáticos (gateway por tenant)
+
+O modelo já prepara o terreno para o próximo incremento:
+
+- O enum `PaymentProvider` (`MANUAL`, `MERCADO_PAGO`, `STRIPE`, `PAGARME`, `ASAAS`) aceita o gateway escolhido pelo tenant.
+- No futuro, cada tenant terá **suas próprias credenciais** (conta/merchant account) no provedor, preferencialmente via **Connect / subcontas** (Mercado Pago Connect, Stripe Connect, Asaas subaccounts, Pagar.me), para o dinheiro cair na conta daquela loja.
+- O checkout consultará a configuração pública do tenant e criará o charge **no servidor** usando as credenciais daquele tenant (nunca no client).
+- Webhooks por tenant (`/api/webhooks/payments/[provider]/[slug]`) validarão assinatura e atualizarão `paymentStatus`/`paidAt` com idempotência.
+- Para PIX dinâmico, o BR Code/EVP será gerado com a chave e os dados daquele tenant no servidor.
 
 ---
 
@@ -234,9 +277,13 @@ Todas as respostas são JSON. Erros de validação retornam `422` com `{ error, 
 | `GET` | `/api/tenants/[slug]` | Tenant completo: branding, categorias, produtos e opções. |
 | `GET` | `/api/tenants/[slug]/products` | Categorias e produtos ativos do tenant. |
 | `GET` | `/api/tenants/[slug]/orders?status=active\|completed\|all&limit=120` | Fila do KDS. |
+| `GET` | `/api/tenants/[slug]/payment-settings` | Configuração de pagamento pública do tenant (métodos habilitados + chave PIX). |
+| `PUT` | `/api/tenants/[slug]/payment-settings` | Atualiza métodos habilitados e chave PIX do tenant. |
 | `POST` | `/api/orders` | Cria pedido, recalcula preços e publica evento SSE. |
 | `GET` | `/api/orders/[id]` | Consulta um pedido. |
 | `PATCH` | `/api/orders/[id]` | Atualiza status (`{ "status": "PREPARING" }`). |
+| `GET` | `/api/orders/[id]/payment` | Consulta status de pagamento do pedido. |
+| `PATCH` | `/api/orders/[id]/payment` | Atualiza status de pagamento (`{ "paymentStatus": "PAID" }`). |
 | `GET` | `/api/realtime/[slug]` | Stream SSE de `order.created` / `order.updated`. |
 | `GET` | `/api/health` | Status do banco. |
 
@@ -367,6 +414,7 @@ Este repositório é um MVP funcional e **não inclui autenticação**. Antes de
 - [ ] Acompanhamento do pedido em tempo real para o cliente.
 - [ ] Cupons, área de entrega, horários de funcionamento e pedido mínimo.
 - [ ] Integração de pagamento online (PIX/cartão) com webhooks.
+- [ ] Pagamentos automáticos por tenant via gateway (Mercado Pago Connect / Asaas subaccounts) com webhooks.
 - [ ] Impressão automática ao aceitar pedido via agente ESC/POS.
 - [ ] Histórico/faturamento e relatórios por tenant.
 - [ ] Redis pub/sub para escalar SSE horizontalmente.
