@@ -1,0 +1,174 @@
+// MenuChef — white-label menu & delivery SaaS
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrderType {
+  DELIVERY
+  TAKEOUT
+  TABLE
+}
+
+enum OrderStatus {
+  PENDING
+  PREPARING
+  READY
+  DISPATCHED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  PIX
+  CASH
+  CARD
+}
+
+/// A restaurant using the white-label platform.
+model Tenant {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  logo          String?
+  tagline       String?
+  primaryColor  String   @default("#ea580c")
+  phone         String
+  address       String
+  /// { footerNote, receiptHeader, showLogo, paperWidthMm, ... }
+  printSettings Json     @default("{}")
+  /// Monotonic per-tenant counter used to generate short order numbers.
+  orderSequence Int      @default(0)
+  deliveryFee   Decimal  @default(0) @db.Decimal(10, 2)
+  isOpen        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  categories Category[]
+  products   Product[]
+  orders     Order[]
+
+  @@map("tenants")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  order     Int      @default(0)
+  tenantId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, order])
+  @@map("categories")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  imageUrl    String?
+  active      Boolean  @default(true)
+  order       Int      @default(0)
+  categoryId  String
+  tenantId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category     Category             @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  optionGroups ProductOptionGroup[]
+  orderItems   OrderItem[]
+
+  @@index([tenantId, active])
+  @@index([categoryId, order])
+  @@map("products")
+}
+
+model ProductOptionGroup {
+  id         String @id @default(cuid())
+  name       String
+  minChoices Int    @default(0)
+  maxChoices Int    @default(1)
+  order      Int    @default(0)
+  productId  String
+
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  options ProductOption[]
+
+  @@index([productId, order])
+  @@map("product_option_groups")
+}
+
+model ProductOption {
+  id            String  @id @default(cuid())
+  name          String
+  price         Decimal @default(0) @db.Decimal(10, 2)
+  order         Int     @default(0)
+  optionGroupId String
+
+  optionGroup ProductOptionGroup @relation(fields: [optionGroupId], references: [id], onDelete: Cascade)
+
+  @@index([optionGroupId, order])
+  @@map("product_options")
+}
+
+model Order {
+  id            String        @id @default(cuid())
+  /// Human-friendly number unique per tenant, e.g. "0042".
+  orderNumber   String
+  type          OrderType
+  status        OrderStatus   @default(PENDING)
+  customerName  String
+  customerPhone String
+  address       String?
+  tableNumber   String?
+  paymentMethod PaymentMethod
+  changeFor     Decimal?      @db.Decimal(10, 2)
+  notes         String?
+  subtotal      Decimal       @db.Decimal(10, 2)
+  deliveryFee   Decimal       @default(0) @db.Decimal(10, 2)
+  total         Decimal       @db.Decimal(10, 2)
+  tenantId      String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items  OrderItem[]
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String?
+  /// Snapshot of the product name so historic orders survive menu edits.
+  name      String
+  quantity  Int
+  unitPrice Decimal @db.Decimal(10, 2)
+  total     Decimal @db.Decimal(10, 2)
+  notes     String?
+  /// Snapshot: [{ groupId, groupName, optionId, optionName, price }]
+  options   Json    @default("[]")
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@map("order_items")
+}
